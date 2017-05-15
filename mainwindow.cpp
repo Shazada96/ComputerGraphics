@@ -1,102 +1,69 @@
-/// @author Shazada
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
-#include <iostream>
-#include <QMessageBox>
-#include <QFileDialog>
-#include <QThread>
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv/cv.h>
 
-MainWindow::MainWindow(QWidget *parent) :QMainWindow(parent), ui(new Ui::MainWindow)
-{
-    ui->setupUi(this);
+#include <iostream>
+
+cv::Mat normalize(cv::Mat img) {
+    // normalize image
+    double minVal, maxVal;
+    cv::minMaxLoc(img, &minVal, &maxVal);
+    cv::Mat out;
+    img.convertTo(out, CV_8U, 255.0/(maxVal - minVal), -minVal * 255.0/(maxVal - minVal));
+    return out;
 }
 
+cv::Mat diffImg(cv::Mat img, int x, int y) {
+    // convert to grayscale
+    cv::Mat gray;
+    cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
 
+    // compute derivative
+    cv::Mat imgDiff;
+    cv::Sobel(gray, imgDiff, CV_16S, x, y);
 
-void MainWindow::loadImage(QString const& path)
+    return imgDiff;
+}
+
+cv::Mat diffx(cv::Mat img) {
+    // compute x derivative
+    return diffImg(img, 1, 0);
+}
+
+cv::Mat diffy(cv::Mat img) {
+    // compute y derivative
+    return diffImg(img, 0, 1);
+}
+
+cv::Mat magnitude(cv::Mat img) {
+    cv::Mat gradX = diffx(img);
+    cv::Mat gradY = diffy(img);
+    cv::Mat absGradX, absGradY, grad;
+    cv::convertScaleAbs(gradX, absGradX);
+    cv::convertScaleAbs(gradY, absGradY);
+    cv::addWeighted(absGradX, 0.5, absGradY, 0.5, 0, grad);
+    return grad;
+}
+
+MainWindow::MainWindow(QWidget *parent) :
+    QMainWindow(parent),
+    ui(new Ui::MainWindow)
 {
-    std::string file = path.toStdString(); //Convert QString to stdstring
-    m_image = cv::imread(file);            // Open existing image
+    ui->setupUi(this);
 
-    if(m_image.empty())
-    {
-        box("File Not Found!");
-        return;                            //Go back without opening empty image!
-    }
+    // read an image
+    cv::Mat image = cv::imread("C:/Users/tedad/OneDrive/Dokumente/ocv1/woman.png" , 1 );
+    // create image window named "My Image"
+    cv::namedWindow("My Image");
+    // show the image on window
+    cv::imshow("My Image", normalize(diffx(image)));
 }
 
 MainWindow::~MainWindow()
 {
     delete ui;
 }
-
-void MainWindow::on_LoadFileButton_clicked()
-{
-    //Load user file from dialog
-    QString path = QFileDialog::getOpenFileName(this, "Open File", "C:/Users/tedad/OneDrive/Dokumente/ocv1", tr("Image (*.jpg *.png)"));
-
-    //Make sure the path has a value (no value if user exits dialog)
-    if(path != "")
-    {
-        //Load file info and save file name
-        QFileInfo info(path);
-        fileName = info.fileName();
-
-        //Load image from path and render image
-        loadImage(path);
-        renderImage();
-    }
-}
-
-void MainWindow::renderImage()
-{
-     //Convert cv image -> QImage -> QPixmap
-    QImage img((uchar*)m_image.data, m_image.cols, m_image.rows, m_image.step, QImage::Format_RGB888);
-    QPixmap pic = QPixmap::fromImage(img);
-
-    //Store dimensions
-    int width  = pic.width();
-    int height = pic.height();
-
-    int labelWidth = ui->Image->width();
-    int labelHeight = ui->Image->height();
-
-    //Scale pic and apply to our Image label
-    ui->Image->setPixmap(pic.scaled(labelWidth, labelHeight));
-
-    //Modify file information text
-    ui->fileName->setText(fileName + "(" + QString::number(width) + "x" + QString::number(height) + ")");
-}
-
-/*int MainWindow::render(int M, int x)
-{
-    if(x < 0)
-        return - x - 1;
-    if(x>=M)
-        return 2*M - x - 1;
-    return x;
-}*/
-
-void MainWindow::on_TestButton_clicked()
-{
-    loadImage("C:/Users/tedad/OneDrive/Dokumente/ocv1/eye.png");
-    renderImage();
-}
-
-void MainWindow::box(QString const& text)
-{
-    QMessageBox msgBox;
-    msgBox.setText(text);
-    msgBox.exec();  //Execute box
-}
-
-/*
- *
-    cv::namedWindow("Image");              // Create a new window...
-
-    cv::imshow( "Image", image );          // ... and show image in it
-
-    // Wait for keystroke
-  //  cv::waitKey(0);
-  */
